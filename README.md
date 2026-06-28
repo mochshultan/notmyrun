@@ -1,6 +1,16 @@
-# NotMyRun
+<p align="center">
+  <img src="public/favicon.svg" alt="NotMyRun" width="80" height="80">
+</p>
 
-Create realistic GPX running and cycling routes directly from your browser. Draw on the map, generate data with real-world pacing, elevation, heart rate, and cadence — then export to GPX or upload straight to Strava.
+<h1 align="center">NotMyRun</h1>
+
+<p align="center">
+  Create realistic GPX running and cycling routes directly from your browser.
+</p>
+
+<p align="center">
+  Draw on the map, generate data with real-world pacing, elevation, heart rate, and cadence — then export to GPX or upload straight to Strava.
+</p>
 
 ## Features
 
