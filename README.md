@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="public/favicon.svg" alt="NotMyRun" width="96" height="96">
+    <img src="https://raw.githubusercontent.com/mochshultan/notmyrun/main/public/favicon.svg" alt="NotMyRun" width="96" height="96">
 </p>
 
 <h1 align="center">NotMyRun</h1>
