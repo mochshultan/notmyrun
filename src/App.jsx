@@ -62,8 +62,8 @@ function App() {
     if (!snappedPoints.length || elevations.length !== snappedPoints.length) return [];
     const cumDists = [0]; let t = 0;
     for (let i = 1; i < snappedPoints.length; i++) { const x = calculateTotalDistance([snappedPoints[i-1], snappedPoints[i]]); t += x; cumDists.push(t); }
-    return generatePaceProfile({ points: snappedPoints, distances: cumDists, elevations, basePaceStr: pace, inconsistency, isBike, startTime });
-  }, [snappedPoints, elevations, pace, inconsistency, isBike, startTime]);
+    return generatePaceProfile({ points: snappedPoints, distances: cumDists, elevations, basePaceStr: pace, inconsistency, isBike, startTime, hrTarget, hrInconsistency, cadenceTarget, cadenceInconsistency });
+  }, [snappedPoints, elevations, pace, inconsistency, isBike, startTime, hrTarget, hrInconsistency, cadenceTarget, cadenceInconsistency]);
   const timeSec = profile.length ? profile.reduce((t, p, i) => i ? t + p.paceSec * (p.distance - profile[i-1].distance) : 0, 0) : 0;
   const avgP = dist > 0 ? timeSec / dist : 330;
   const avgHr = profile.length ? Math.round(profile.reduce((a, p) => a + (p.hr || 0), 0) / profile.length) : 0;
