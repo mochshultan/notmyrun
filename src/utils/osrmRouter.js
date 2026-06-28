@@ -42,10 +42,11 @@ export async function snapToRoads(waypoints, isBike = false) {
     return waypoints.map(wp => ({ lat: wp.lat, lon: wp.lng || wp.lon }));
   }
 
-  const profile = isBike ? 'bike' : 'foot';
+  // Always use 'foot' profile for pedestrian routing, ignoring one-way vehicle traffic laws.
+  const profile = 'foot';
   const coords = waypoints.map(wp => `${wp.lng || wp.lon},${wp.lat}`).join(';');
-  
-  const url = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=false`;
+
+  const url = `https://router.project-osrm.org/route/v1/${profile}/${coords}?overview=full&geometries=geojson&steps=false&annotations=false&continue_straight=false`;
 
   try {
     const response = await fetch(url);
