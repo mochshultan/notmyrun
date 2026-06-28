@@ -1,99 +1,93 @@
 <p align="center">
-  <img src="public/favicon.svg" alt="NotMyRun" width="80" height="80">
+    <img src="public/favicon.svg" alt="NotMyRun" width="96" height="96">
 </p>
 
 <h1 align="center">NotMyRun</h1>
 
 <p align="center">
-  Create realistic GPX running and cycling routes directly from your browser. Free &amp; open source.
+    Create realistic GPX running and cycling routes directly from your browser.
 </p>
 
 <p align="center">
-  Draw on the map, generate data with real-world pacing, elevation, heart rate, and cadence — then export to GPX or upload straight to Strava.
+    <a href="https://github.com/mochshultan/notmyrun/blob/main/LICENSE">
+        <img alt="MIT License" src="https://img.shields.io/github/license/mochshultan/notmyrun?color=FC5200&style=flat-square&label=License" />
+    </a>
+    <a href="https://github.com/mochshultan/notmyrun/stargazers">
+        <img alt="Stars" src="https://img.shields.io/github/stars/mochshultan/notmyrun?color=FC5200&style=flat-square&label=Stars" />
+    </a>
+    <a href="https://github.com/mochshultan/notmyrun/issues">
+        <img alt="Issues" src="https://img.shields.io/github/issues/mochshultan/notmyrun?color=FC5200&style=flat-square&label=Issues" />
+    </a>
 </p>
 
 ## Features
 
-- **Draw routes** on an interactive OpenStreetMap — click waypoints or use presets (Heart, Circle shapes)
-- **Road snapping** via OSRM — paths follow real roads automatically
-- **Live computations** — distance, duration, pace, elevation gain, heart rate, cadence
-- **Data charts** — pace profile, elevation profile, heart rate
-- **Run / Bike mode** — adjusts pacing formulas, HR, and cadence per activity
-- **Strava integration** — generates GPX file and opens Strava upload in one click
-- **Export image cards** — share card (1080×1080), story card (1080×1920), or minimal route art
-- **Search locations** via OpenStreetMap Nominatim with fuzzy caching
+- Draw routes on an interactive OpenStreetMap — click waypoints or use presets (Heart, Circle)
+- Road snapping via OSRM — paths follow real roads automatically
+- Live stats — distance, duration, pace, elevation gain, heart rate, cadence
+- Run / Bike mode with grade-adjusted pacing, HR drift, and cadence modeling
+- Download GPX files or upload directly to Strava in one click
+- Export image cards — share card (1080×1080), story (1080×1920), or minimal route art
+- Location search with fuzzy caching
 
-## Prerequisites
+## Getting Started
 
-- [Node.js](https://nodejs.org/) 18 or later
-- npm (included with Node.js)
+### Prerequisites
 
-## Getting started
+- Node.js 18 or later
+- npm
 
-```bash
+### Quick Setup
+
+```sh
 git clone https://github.com/mochshultan/notmyrun.git
 cd notmyrun
 npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open http://localhost:5173 in your browser.
 
-To create a production build:
+### Build
 
-```bash
+```sh
 npm run build
 ```
 
-The output is in the `dist/` folder and can be served with any static hosting (GitHub Pages, Vercel, Netlify, etc.).
+Output goes to `dist/`. Serve with any static hosting — GitHub Pages, Vercel, Netlify.
 
-## How it works
+## How It Works
 
 ```
 Place waypoints  →  Snapped to roads (OSRM)
        ↓
   Elevation data fetched (Open-Elevation API)
        ↓
-  Pace, HR, cadence generated (grade-adjusted)
+  Pace, HR, cadence generated — grade-adjusted, with fatigue curves and Gaussian noise
        ↓
   Download GPX or upload to Strava
 ```
 
-The pace engine uses a grade-adjusted model with fatigue curves, Gaussian noise for realism, and optional heart rate drift. A 5-point moving average smooths the HR output.
-
-## Tech stack
+## Tech Stack
 
 | Tool | Purpose |
 |------|---------|
-| [React](https://react.dev/) 19 | UI framework |
-| [Vite](https://vite.dev/) 8 | Build tool |
-| [Tailwind CSS](https://tailwindcss.com/) v4 | Styling & design tokens |
-| [Leaflet](https://leafletjs.com/) + [react-leaflet](https://react-leaflet.js.org/) | Interactive maps |
-| [Recharts](https://recharts.org/) | Data charts |
-| [OSRM](http://project-osrm.org/) | Road snapping |
-| [Open-Elevation API](https://open-elevation.com/) | Elevation data |
-| [Lucide](https://lucide.dev/) | Icons |
-| [Geist](https://vercel.com/font) | Typeface |
+| React 19 | UI framework |
+| Vite 8 | Build tool |
+| Tailwind CSS v4 | Styling |
+| Leaflet + react-leaflet | Interactive maps |
+| Recharts | Data charts |
+| Lucide | Icons |
+| Geist | Typeface |
 
-## APIs used
+### Public APIs Used
 
-The app relies on three public APIs (no key required):
+- [OSRM](http://project-osrm.org/) — road snapping
+- [Nominatim](https://nominatim.org/) — location search
+- [Open-Elevation API](https://open-elevation.com/) — elevation lookup
 
-- **[OSRM](http://project-osrm.org/)** — snaps waypoints to the road network via `/driving` or `/cycling` profile
-- **[Nominatim](https://nominatim.org/)** — location search with fuzzy text matching
-- **[Open-Elevation API](https://open-elevation.com/)** — point elevation lookup
-
-## Roadmap
-
-- [ ] Offline mode (cache OSRM responses)
-- [ ] GPX import for editing existing routes
-- [ ] More shape presets (loop, out-and-back, figure-8)
-- [ ] Weather data overlay
-
-## Contributing
-
-Contributions are welcome. Open an issue or pull request.
+No API keys required.
 
 ## License
 
-MIT
+[MIT](LICENSE)
