@@ -1,27 +1,24 @@
 # NotMyRun
 
-> **Generate realistic GPX routes for running & cycling — with live stats, elevation profiles, and Strava upload.**
+Create realistic GPX running and cycling routes directly from your browser. Draw on the map, generate data with real-world pacing, elevation, heart rate, and cadence — then export to GPX or upload straight to Strava.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+## Features
 
----
+- **Draw routes** on an interactive OpenStreetMap — click waypoints or use presets (Heart, Circle shapes)
+- **Road snapping** via OSRM — paths follow real roads automatically
+- **Live computations** — distance, duration, pace, elevation gain, heart rate, cadence
+- **Data charts** — pace profile, elevation profile, heart rate
+- **Run / Bike mode** — adjusts pacing formulas, HR, and cadence per activity
+- **Strava integration** — generates GPX file and opens Strava upload in one click
+- **Export image cards** — share card (1080×1080), story card (1080×1920), or minimal route art
+- **Search locations** via OpenStreetMap Nominatim with fuzzy caching
 
-## ✨ Features
+## Prerequisites
 
-- 🗺️ **Draw routes on an interactive map** — click to place waypoints, or use built-in shapes (Heart, Circle)
-- 🛣️ **Road-snapped paths** via OSRM — your route follows real roads
-- ⛰️ **Elevation profiles** with realistic pace adjustments based on grade
-- 📊 **Live stats** — distance, duration, pace, heart rate, cadence
-- 📈 **Data visualizations** — pace, elevation, and heart rate charts
-- 🚴 **Run / Bike modes** — adjust pacing, HR, and cadence per activity type
-- 📁 **Download GPX files** — ready for your GPS device or phone app
-- 🔗 **Upload directly to Strava** — auto-downloads GPX and opens Strava upload page
-- 🖼️ **Export share cards** — square, story, or minimal route art (PNG)
-- ⚡ **Realistic data engine** — grade-adjusted pace, fatigue curves, HR drift, cadence modeling
+- [Node.js](https://nodejs.org/) 18 or later
+- npm (included with Node.js)
 
----
-
-## 🚀 Quick Start
+## Getting started
 
 ```bash
 git clone https://github.com/mochshultan/notmyrun.git
@@ -30,24 +27,63 @@ npm install
 npm run dev
 ```
 
----
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-## 🛠️ Tech Stack
+To create a production build:
+
+```bash
+npm run build
+```
+
+The output is in the `dist/` folder and can be served with any static hosting (GitHub Pages, Vercel, Netlify, etc.).
+
+## How it works
+
+```
+Place waypoints  →  Snapped to roads (OSRM)
+       ↓
+  Elevation data fetched (Open-Elevation API)
+       ↓
+  Pace, HR, cadence generated (grade-adjusted)
+       ↓
+  Download GPX or upload to Strava
+```
+
+The pace engine uses a grade-adjusted model with fatigue curves, Gaussian noise for realism, and optional heart rate drift. A 5-point moving average smooths the HR output.
+
+## Tech stack
 
 | Tool | Purpose |
 |------|---------|
-| **React 19** | UI framework |
-| **Vite 8** | Build tool |
-| **Tailwind CSS v4** | Styling |
-| **Leaflet + react-leaflet** | Interactive maps |
-| **Recharts** | Data charts |
-| **OSRM API** | Road snapping |
-| **OpenStreetMap Nominatim** | Location search |
-| **Open-Elevation API** | Elevation data |
-| **Lucide** | Icons |
+| [React](https://react.dev/) 19 | UI framework |
+| [Vite](https://vite.dev/) 8 | Build tool |
+| [Tailwind CSS](https://tailwindcss.com/) v4 | Styling & design tokens |
+| [Leaflet](https://leafletjs.com/) + [react-leaflet](https://react-leaflet.js.org/) | Interactive maps |
+| [Recharts](https://recharts.org/) | Data charts |
+| [OSRM](http://project-osrm.org/) | Road snapping |
+| [Open-Elevation API](https://open-elevation.com/) | Elevation data |
+| [Lucide](https://lucide.dev/) | Icons |
+| [Geist](https://vercel.com/font) | Typeface |
 
----
+## APIs used
 
-## 📄 License
+The app relies on three public APIs (no key required):
 
-[MIT](LICENSE)
+- **[OSRM](http://project-osrm.org/)** — snaps waypoints to the road network via `/driving` or `/cycling` profile
+- **[Nominatim](https://nominatim.org/)** — location search with fuzzy text matching
+- **[Open-Elevation API](https://open-elevation.com/)** — point elevation lookup
+
+## Roadmap
+
+- [ ] Offline mode (cache OSRM responses)
+- [ ] GPX import for editing existing routes
+- [ ] More shape presets (loop, out-and-back, figure-8)
+- [ ] Weather data overlay
+
+## Contributing
+
+Contributions are welcome. Open an issue or pull request.
+
+## License
+
+MIT
