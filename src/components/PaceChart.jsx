@@ -23,9 +23,10 @@ export default function PaceChart({ profileData }) {
           axisLine={false}
           minTickGap={30}
         />
-        <YAxis 
+        <YAxis
           dataKey="paceSec"
           reversed={true}
+          domain={['dataMin - 15', 'dataMax + 15']}
           tickFormatter={(val) => formatSecondsToPace(val)}
           stroke="hsl(var(--muted-foreground))"
           tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
