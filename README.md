@@ -1,16 +1,53 @@
-# React + Vite
+# NotMyRun
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> **Generate realistic GPX routes for running & cycling — with live stats, elevation profiles, and Strava upload.**
 
-Currently, two official plugins are available:
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 🗺️ **Draw routes on an interactive map** — click to place waypoints, or use built-in shapes (Heart, Circle)
+- 🛣️ **Road-snapped paths** via OSRM — your route follows real roads
+- ⛰️ **Elevation profiles** with realistic pace adjustments based on grade
+- 📊 **Live stats** — distance, duration, pace, heart rate, cadence
+- 📈 **Data visualizations** — pace, elevation, and heart rate charts
+- 🚴 **Run / Bike modes** — adjust pacing, HR, and cadence per activity type
+- 📁 **Download GPX files** — ready for your GPS device or phone app
+- 🔗 **Upload directly to Strava** — auto-downloads GPX and opens Strava upload page
+- 🖼️ **Export share cards** — square, story, or minimal route art (PNG)
+- ⚡ **Realistic data engine** — grade-adjusted pace, fatigue curves, HR drift, cadence modeling
 
-## Expanding the Oxlint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## 🚀 Quick Start
+
+```bash
+git clone https://github.com/mochshultan/notmyrun.git
+cd notmyrun
+npm install
+npm run dev
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Tool | Purpose |
+|------|---------|
+| **React 19** | UI framework |
+| **Vite 8** | Build tool |
+| **Tailwind CSS v4** | Styling |
+| **Leaflet + react-leaflet** | Interactive maps |
+| **Recharts** | Data charts |
+| **OSRM API** | Road snapping |
+| **OpenStreetMap Nominatim** | Location search |
+| **Open-Elevation API** | Elevation data |
+| **Lucide** | Icons |
+
+---
+
+## 📄 License
+
+[MIT](LICENSE)
