@@ -11,17 +11,81 @@ export function formatSecondsToPace(seconds) {
   return `${min}:${sec.toString().padStart(2, '0')}`;
 }
 
+let _gaussNext = null;
 function gaussianRandom(mean, std) {
-  const u = 1 - Math.random();
-  const v = Math.random();
-  return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  // Box-Muller with cached second value
+  if (_gaussNext !== null) { const v = _gaussNext; _gaussNext = null; return mean + std * v; }
+  let u, v, s;
+  do { u = 2 * Math.random() - 1; v = 2 * Math.random() - 1; s = u * u + v * v; } while (s >= 1 || s === 0);
+  const f = Math.sqrt(-2 * Math.log(s) / s);
+  _gaussNext = v * f;
+  return mean + std * u * f;
 }
 
+/**
+ * Smooth elevation to remove micro‑noise before computing grade.
+ * Rolling average over `window` points (default 11 ≈ 100 m on snapped roads).
+ */
+function smoothElevation(elevations, window = 11) {
+  const out = elevations.slice();
+  const half = Math.floor(window / 2);
+  for (let i = 0; i < out.length; i++) {
+    let sum = 0, count = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(out.length - 1, i + half); j++) {
+      sum += elevations[j]; count++;
+    }
+    out[i] = sum / count;
+  }
+  return out;
+}
+
+/**
+ * Running-grade over a minimum distance window (~100 m) so that
+ * a single noisy data point doesn't produce a fake steep grade.
+ */
+function rollingGrade(elevations, distances, minWindowKm = 0.08) {
+  const N = elevations.length;
+  const grades = new Array(N).fill(0);
+  if (N < 2) return grades;
+
+  // first point
+  grades[0] = (elevations[1] - elevations[0]) / Math.max(0.001, (distances[1] - distances[0]) * 1000);
+
+  for (let i = 1; i < N; i++) {
+    // Look ahead until we've covered at least minWindowKm or hit the end
+    let j = i + 1;
+    while (j < N && (distances[j] - distances[i]) < minWindowKm) j++;
+    if (j >= N) j = N - 1;
+    if (j === i) j = i + 1;
+    const dKm = distances[j] - distances[i];
+    if (dKm > 0.001) {
+      grades[i] = (elevations[j] - elevations[i]) / (dKm * 1000);
+    } else {
+      grades[i] = 0;
+    }
+  }
+
+  // Smooth grades with a 3‑point moving average
+  const smoothed = grades.slice();
+  for (let i = 1; i < N - 1; i++) {
+    smoothed[i] = (grades[i - 1] + grades[i] + grades[i + 1]) / 3;
+  }
+  return smoothed;
+}
+
+/**
+ * Realistic grade‑to‑pace multiplier for running.
+ * Based on research (Daniels, Tinman): ~4-5% slowdown per % grade uphill,
+ * ~2-3% speed-up per % grade downhill (capped).
+ */
 function gradePaceMultiplier(grade) {
-  const g = Math.max(-0.45, Math.min(0.45, grade));
-  if (g >= 0) return 1 + 4.0 * g;
-  if (g >= -0.10) return 1 + 2.0 * g;
-  return 1 + 0.5 * g;
+  const g = Math.max(-0.12, Math.min(0.15, grade));
+  if (g >= 0) {
+    // uphill: 5% slowdown per % grade → at 15% grade it's 1.75×
+    return 1 + 4.0 * g;
+  }
+  // downhill: 3% speed-up per % grade, capped at −9% (91%)
+  return Math.max(0.91, 1 + 2.5 * g);
 }
 
 /**
@@ -51,18 +115,33 @@ function bearingChange(p1, p2, p3) {
 }
 
 /**
+ * Heart‑rate zones based on a runner profile.
+ * Z1 (very light)  <124  · Z2 (light)  124–144
+ * Z3 (moderate)    144–164 · Z4 (hard)  164–184
+ * Z5 (max)         >184
+ */
+const ZONES = { Z1: 124, Z2: 144, Z3: 164, Z4: 184, Z5: 200 };
+
+/**
+ * Map an effort level (0…1) to a target HR zone mid‑point.
+ */
+function effortToHR(effort) {
+  if (effort < 0.25) return ZONES.Z1 - 8 + effort * 32;         // 110→124
+  if (effort < 0.50) return ZONES.Z1 + (effort - 0.25) * 80;     // 124→144
+  if (effort < 0.75) return ZONES.Z2 + (effort - 0.50) * 80;     // 144→164
+  if (effort < 0.92) return ZONES.Z3 + (effort - 0.75) * 77;     // 164→184
+  return ZONES.Z4 + (effort - 0.92) * 200;                        // 184→200
+}
+
+/**
  * Generate full run profile with pace, HR, cadence, and timestamps.
  *
- * HR follows a physiological model:
- *  - Baseline = hrTarget (set by user slider)
- *  - Faster pace → higher HR / slower pace → lower HR
- *  - Uphill adds HR beyond pace (climbing effort)
- *  - Downhill gives slight gravity-assist offset
- *  - Sharp turns cause brief HR elevation
- *  - HR inertia: smooth rise (~20 s), slower fall (~35 s)
- *  - Cardiac drift: +4 bpm/hour over time
- *  - Sprint finish: last 8 % distance → HR spikes toward max(HR)
- *  - hrInconsistency controls short-term variability around the curve
+ *  – Grade is computed over a rolling 80 m window to suppress noise.
+ *  – Pace adjusts realistically: hills and corners have a modest effect.
+ *  – Inconsistency produces gentle undulation, not wild spikes.
+ *  – HR follows effort zones (Z2–Z5), NOT a linear function of pace.
+ *  – HR has thermal inertia: rises in ~45 s, recovers in ~60 s.
+ *  – Warm‑up (~2 min), cardiac drift (+4 bpm/hr), finish kick.
  */
 export function generatePaceProfile({
   points,
@@ -81,36 +160,40 @@ export function generatePaceProfile({
   const totalDist = distances[distances.length - 1] || 0;
   const startMs = new Date(startTime).getTime();
 
-  const N = points.length;
-  const results = [];
-  const timestamps = [startMs];
+  // Smooth elevation before computing grade
+  const smoothEle = smoothElevation(elevations);
+  const grades = rollingGrade(smoothEle, distances);
 
-  // Pre‑compute turn angles at every point (0 at ends)
+  const N = points.length;
+  const timestamps = [startMs];
+  const results = [];
+
+  // Pre‑compute turn angles (need at least 3 points)
   const turnAngles = new Array(N).fill(0);
-  for (let i = 1; i < N - 1; i++) {
-    turnAngles[i] = bearingChange(points[i - 1], points[i], points[i + 1]);
+  if (N >= 3) {
+    for (let i = 1; i < N - 1; i++) {
+      turnAngles[i] = bearingChange(points[i - 1], points[i], points[i + 1]);
+    }
   }
 
-  // Physiological constants
-  const MAX_HR = 190;  // ~220 − age(30)
-  const REST_HR = 60;
+  // ── Determine an effective flat pace from user's target ─────────
+  // The user slider sets the *average* pace they want the whole run to feel like.
+  // We adjust in real time so actual average ≈ target average.
+  const targetAvgPace = basePaceSec;
 
-  let currentHR = hrTarget; // inertia state
+  // ── HR state ────────────────────────────────────────────────────
+  const REST_HR = 60;
+  let currentHR = hrTarget;   // inertia EMA state
+  let warmupComplete = false;
 
   for (let i = 0; i < N; i++) {
     const distFromStart = distances[i];
-    let grade = 0;
     let segmentDistKm = 0;
+    if (i > 0) segmentDistKm = distances[i] - distances[i - 1];
+    const grade = grades[i];
 
-    if (i > 0) {
-      segmentDistKm = distances[i] - distances[i - 1];
-      if (segmentDistKm > 0) {
-        grade = (elevations[i] - elevations[i - 1]) / (segmentDistKm * 1000);
-      }
-    }
-
-    // ── 1. GRADE‑ADJUSTED PACE ──────────────────────────────────
-    let adjustedPace = basePaceSec;
+    // ── 1. PACE FROM GRADE ────────────────────────────────────────
+    let adjustedPace = targetAvgPace;
     if (isBike) {
       if (grade > 0) adjustedPace *= (1 + grade * 5);
       else adjustedPace *= Math.max(0.4, 1 + grade * 3);
@@ -118,104 +201,121 @@ export function generatePaceProfile({
       adjustedPace *= gradePaceMultiplier(grade);
     }
 
-    // ── 2. CORNER SLOWDOWN ──────────────────────────────────────
+    // ── 2. CORNER SLOWDOWN ────────────────────────────────────────
     const turnAngle = turnAngles[i] || 0;
-    if (turnAngle > 20) {
-      // Gradual slowdown: 0 % at 20° → ~15 % at 180° (hairpin)
-      adjustedPace *= 1 + (turnAngle / 180) * 0.15;
+    if (turnAngle > 25) {
+      // Hairpin (180°) costs at most 8 %; 90° turn ~4 %
+      adjustedPace *= 1 + (turnAngle / 180) * 0.08;
     }
 
-    // ── 3. SPRINT FINISH (last 8 %) ─────────────────────────────
+    // ── 3. SPRINT FINISH (last 6 %) ───────────────────────────────
     const progress = totalDist > 0 ? distFromStart / totalDist : 0;
     let sprintFactor = 1;
-    if (progress > 0.92) {
-      const t = (progress - 0.92) / 0.08; // 0 → 1
-      sprintFactor = 1 - t * 0.2;          // up to 20 % faster
+    if (progress > 0.94) {
+      const t = (progress - 0.94) / 0.06;   // 0 → 1
+      sprintFactor = 1 - t * 0.12;           // up to 12 % faster
     }
 
-    // ── 4. PACE VARIATION ───────────────────────────────────────
-    const sigma = (inconsistency / 100) * basePaceSec * 0.12;
-    const noisyPace = adjustedPace * sprintFactor + gaussianRandom(0, sigma);
+    // ── 4. PACE VARIATION (gentle, not wild) ──────────────────────
+    // At inconsistency=100 %, realistic band is ~±8 % of base pace.
+    // At inconsistency=0 %, no noise at all.
+    const sigmaPace = (inconsistency / 100) * targetAvgPace * 0.04;
+    const rawPace = adjustedPace * sprintFactor;
+    // Use a small random offset, but re‑centered to avoid drift
+    const noiseOffset = gaussianRandom(0, sigmaPace);
+    // Clamp noise so it can't swing >inconsistency% from adjusted
+    const maxNoise = (inconsistency / 100) * targetAvgPace * 0.08;
+    const clampedNoise = Math.max(-maxNoise, Math.min(maxNoise, noiseOffset));
 
-    // Fatigue: slight slowdown in last 20 %
-    const fatigueFactor = progress > 0.8
-      ? 1 + 0.08 * ((progress - 0.8) / 0.2)
-      : 1.0;
-    let finalPace = noisyPace * fatigueFactor;
+    // Fatigue: last 20 % distance → up to 4 % slowdown
+    let fatigueFactor = 1;
+    if (progress > 0.80) {
+      fatigueFactor = 1 + 0.04 * ((progress - 0.80) / 0.20);
+    }
+
+    let finalPace = (rawPace + clampedNoise) * fatigueFactor;
 
     // Clamp
     if (isBike) finalPace = Math.max(60, Math.min(600, finalPace));
-    else         finalPace = Math.max(150, Math.min(900, finalPace));
+    else         finalPace = Math.max(180, Math.min(600, finalPace));
 
-    // ── 5. TIMESTAMPS ───────────────────────────────────────────
+    // ── 5. TIMESTAMPS ─────────────────────────────────────────────
     if (i > 0) {
       const segSeconds = segmentDistKm * finalPace;
       timestamps[i] = timestamps[i - 1] + segSeconds * 1000;
     }
 
-    // ── 6. HEART RATE — PHYSIOLOGICAL MODEL ─────────────────────
-    const paceRatio = finalPace / basePaceSec;
+    // ── 6. HEART RATE — ZONE‑BASED (stable, not bouncing) ────────
+    // Determine effort demand from combined inputs.
+    let effort = 0;
 
-    // 6a. Pace‑driven component
-    //     faster pace (ratio < 1) → HR climbs; slower → HR drops
-    const hrFromPace = hrTarget + 30 * (1 - paceRatio);
+    // 6a. Pace effort: how hard is the current pace vs flat target?
+    //     slower → less effort; faster → higher effort; capped.
+    const paceEffort = 0.5 + 0.5 * Math.max(0.7, Math.min(1.3, targetAvgPace / finalPace));
+    // paceEffort: 0.85–1.15 roughly (0.6–1.4 unbounded range)
 
-    // 6b. Grade component — climbs add extra HR beyond pace alone;
-    //     steep descents give a small gravity‑assist offset
-    let hrFromGrade = 0;
-    if (grade > 0.015) {
-      hrFromGrade = grade * 120;           // +12 bpm / 10 %
-    } else if (grade < -0.06) {
-      hrFromGrade = grade * 30;            // −1.8 bpm / 10 % (mild)
+    // 6b. Grade effort: uphills add effort, downhills subtract a little
+    let gradeEffort = 0;
+    if (grade > 0.01) {
+      gradeEffort = Math.min(0.20, grade * 1.5);    // max +0.20 at ~13%
+    } else if (grade < -0.05) {
+      gradeEffort = Math.max(-0.05, grade * 0.8);   // mild relief
     }
 
-    // 6c. Turn spike (~3 bpm over 40°)
-    const hrFromTurn = turnAngle > 40 ? 3 : turnAngle > 20 ? 1 : 0;
+    // 6c. Corner effort
+    const turnEffort = turnAngle > 40 ? 0.04 : turnAngle > 25 ? 0.02 : 0;
 
-    // 6d. Warm‑up: first 5 % of distance → HR ramps up
-    let warmupRatio = 1;
-    if (progress < 0.05) {
-      warmupRatio = 0.88 + 0.12 * (progress / 0.05);
+    // 6d. Fatigue drift: effort creeps up over time
+    const elapsedMin = (timestamps[i] - timestamps[0]) / 60000;
+    const driftEffort = (elapsedMin / 60) * 0.03;   // +0.03/hr
+
+    // 6e. Sprint finish: extra effort
+    let finishEffort = 0;
+    if (progress > 0.94) {
+      const t = (progress - 0.94) / 0.06;
+      finishEffort = t * 0.12;                      // up to +0.12
     }
 
-    // 6e. Finish kick (last 8 % → HR climbs toward max)
-    let finishKick = 0;
-    if (progress > 0.92) {
-      const t = (progress - 0.92) / 0.08;
-      finishKick = t * 15;                 // up to +15 bpm at tape
+    effort = Math.min(1.0, paceEffort + gradeEffort + turnEffort + driftEffort + finishEffort);
+
+    // 6f. Map effort → target HR (zone mid‑points)
+    //     Scale the effort so that user‑set hrTarget aligns with
+    //     "steady state" effort (≈ 0.55 effort → ~145 bpm)
+    const effortNormalized = effort * (hrTarget / ZONES.Z2);
+    let targetHR = effortToHR(effortNormalized);
+    targetHR = Math.max(REST_HR + 5, Math.min(ZONES.Z5, targetHR));
+
+    // 6g. Warm‑up ramp: first ~2 minutes
+    if (i > 0) {
+      const elapsedSec = (timestamps[i] - timestamps[0]) / 1000;
+      if (elapsedSec < 120) {
+        const warmRatio = elapsedSec / 120;
+        const startHR = Math.round(REST_HR + (hrTarget - REST_HR) * 0.35);
+        targetHR = startHR + (targetHR - startHR) * warmRatio;
+      } else {
+        warmupComplete = true;
+      }
     }
 
-    // 6f. Combine
-    let targetHR = hrFromPace * warmupRatio + hrFromGrade + hrFromTurn + finishKick;
-
-    // Cap targets
-    targetHR = Math.max(REST_HR + 10, Math.min(MAX_HR, targetHR));
-
-    // 6g. HR inertia — exponential moving average
+    // 6h. HR inertia (EMA) — rise τ=45s, fall τ=60s
     let hr;
     if (i === 0) {
-      hr = hrTarget * warmupRatio + gaussianRandom(0, 1);
+      hr = Math.round(REST_HR + (hrTarget - REST_HR) * 0.35);
     } else {
-      const timeStep = segmentDistKm * finalPace / 60; // minutes
-      const dtMin = Math.max(0.05, timeStep);
-      // Rise is faster (τ = 20 s) than recovery (τ = 35 s)
-      const tau = targetHR > currentHR ? 0.33 : 0.58;
+      const dtMin = Math.max(0.05, segmentDistKm * finalPace / 60);
+      const tau = targetHR > currentHR ? 0.75 : 1.0;   // minutes
       const alpha = 1 - Math.exp(-dtMin / tau);
       hr = currentHR + alpha * (targetHR - currentHR);
     }
 
-    // 6h. Cardiac drift: +4 bpm per hour
-    const elapsedMin = (timestamps[i] - timestamps[0]) / 60000;
-    hr += (elapsedMin / 60) * 4;
+    // 6i. Tiny variability (barely noticeable — matches real data)
+    const hrVarSigma = (hrInconsistency / 100) * 3;
+    hr += gaussianRandom(0, hrVarSigma * 0.3);
 
-    // 6i. Short‑term variability (from user slider)
-    const hrVarSigma = (hrInconsistency / 100) * 6;
-    hr += gaussianRandom(0, hrVarSigma * 0.4);
-
-    hr = Math.round(Math.max(REST_HR + 10, Math.min(MAX_HR, hr)));
+    hr = Math.round(Math.max(REST_HR + 5, Math.min(ZONES.Z5, hr)));
     currentHR = hr;
 
-    // ── 7. CADENCE ──────────────────────────────────────────────
+    // ── 7. CADENCE ────────────────────────────────────────────────
     let cad;
     if (isBike) {
       const speedKmh = 3600 / finalPace;
@@ -223,19 +323,19 @@ export function generatePaceProfile({
         70 + speedKmh * 0.8 + gaussianRandom(0, 3)
       )));
     } else {
-      // Cadence rises with effort (sprint / climb) and dips on tight turns
-      const turnPenalty = turnAngle > 40 ? 6 : turnAngle > 25 ? 3 : 0;
-      const effortRatio = (targetHR - REST_HR) / (hrTarget - REST_HR);
-      const cadAdjust = (effortRatio - 1) * 12;  // ~±12 spm around target
-      const cadSigma = (cadenceInconsistency / 100) * 8;
-      cad = Math.round(Math.max(140, Math.min(200,
+      // Cadence changes with effort, not directly with grade
+      const effortRatio = (hr - REST_HR) / (hrTarget - REST_HR);
+      const turnPenalty = turnAngle > 45 ? 5 : turnAngle > 30 ? 2 : 0;
+      const cadAdjust = (effortRatio - 1) * 8;    // ±8 spm around target
+      const cadSigma = (cadenceInconsistency / 100) * 5;
+      cad = Math.round(Math.max(145, Math.min(195,
         cadenceTarget + cadAdjust - turnPenalty + gaussianRandom(0, cadSigma * 0.3)
       )));
     }
 
     results.push({
       distance: distFromStart,
-      elevation: elevations[i],
+      elevation: smoothEle[i],
       paceSec: finalPace,
       speed: 1000 / finalPace,
       hr,
