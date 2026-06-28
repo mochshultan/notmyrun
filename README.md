@@ -5,7 +5,7 @@
 <h1 align="center">NotMyRun</h1>
 
 <p align="center">
-  Create realistic GPX running and cycling routes directly from your browser.
+  Create realistic GPX running and cycling routes directly from your browser. Free &amp; open source.
 </p>
 
 <p align="center">
